@@ -1,10 +1,14 @@
 const request = require('supertest');
 const app = require('../src/app');
 const { store, resetStore } = require('../src/data/store');
+const { resetTestDb } = require('../src/db/db');
 const valid = { name: 'Career Coaching', description: 'Help with resumes and interviews.', durationMinutes: 20, priority: 'medium' };
 const admin = req => req.set('x-user-id', '1');
 const user = req => req.set('x-user-id', '6');
-beforeEach(resetStore);
+beforeEach(async () => {
+  resetStore();
+  await resetTestDb();
+});
 
 test('admin-created service is returned to a separate user and has an empty queue', async () => {
   const created = await admin(request(app).post('/api/services')).send(valid);
