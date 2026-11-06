@@ -1,6 +1,6 @@
 const request = require("supertest");
 const app = require("../src/app");
-const { store, resetStore } = require("../src/data/store");
+const { query, resetTestDb } = require("../src/db/db");
 const {
   listNotifications,
   addNotification,
@@ -10,7 +10,9 @@ const {
   notifyAlmostReady,
   notifyServed,
   notifyNewSignup,
+  notifyRemoved,
 } = require("../src/modules/notifications/notificationService");
+const { catchError, count } = require("./helpers");
 
 const admin = { id: 1, role: "admin" };
 const demo = { id: 6, role: "user" };
@@ -18,168 +20,168 @@ const diego = { id: 3, role: "user" };
 
 const valid = { audience: "user", userId: 3, type: "queue_update", title: "Hi", message: "Hello there." };
 
-const catchError = (fn) => {
-  try {
-    fn();
-  } catch (err) {
-    return err;
-  }
-  throw new Error("expected an error");
-};
-
-beforeEach(() => {
-  resetStore();
+beforeEach(async () => {
+  await resetTestDb();
 });
 
 describe("addNotification validation", () => {
-  test("adds a valid user notification", () => {
-    const n = addNotification(valid);
+  test("adds a valid user notification and saves it in the database", async () => {
+    const n = await addNotification(valid);
     expect(n).toMatchObject({ id: 5, audience: "user", userId: 3, type: "queue_update", title: "Hi", message: "Hello there.", read: false });
     expect(new Date(n.createdAt).toISOString()).toBe(n.createdAt);
-    expect(store.notifications).toContainEqual(n);
+    const { rows } = await query("SELECT user_id, status, title FROM notifications WHERE id = 5");
+    expect(rows[0]).toEqual({ user_id: 3, status: "sent", title: "Hi" });
   });
 
-  test("admin notifications don't need or keep a userId", () => {
-    const n = addNotification({ ...valid, audience: "admin", userId: undefined });
+  test("admin notifications don't need or keep a userId", async () => {
+    const n = await addNotification({ ...valid, audience: "admin", userId: undefined });
     expect(n.audience).toBe("admin");
     expect(n).not.toHaveProperty("userId");
   });
 
-  test("trims title and message", () => {
-    const n = addNotification({ ...valid, title: "  Hi  ", message: "  Hello.  " });
+  test("trims title and message", async () => {
+    const n = await addNotification({ ...valid, title: "  Hi  ", message: "  Hello.  " });
     expect(n.title).toBe("Hi");
     expect(n.message).toBe("Hello.");
   });
 
-  test("rejects a bad audience", () => {
-    const err = catchError(() => addNotification({ ...valid, audience: "everyone" }));
+  test("rejects a bad audience", async () => {
+    const err = await catchError(() => addNotification({ ...valid, audience: "everyone" }));
     expect(err.status).toBe(400);
     expect(err.fields.audience).toBeDefined();
   });
 
-  test("rejects a user notification without a userId", () => {
-    const err = catchError(() => addNotification({ ...valid, userId: undefined }));
-    expect(err.status).toBe(400);
+  test("rejects a user notification without a userId", async () => {
+    const err = await catchError(() => addNotification({ ...valid, userId: undefined }));
     expect(err.fields.userId).toBe("User is required for a user notification.");
   });
 
-  test("rejects an unknown user", () => {
-    const err = catchError(() => addNotification({ ...valid, userId: 999 }));
+  test("rejects a userId that doesn't exist", async () => {
+    const err = await catchError(() => addNotification({ ...valid, userId: 999 }));
     expect(err.fields.userId).toBe("That user doesn't exist.");
+    expect((await catchError(() => addNotification({ ...valid, userId: "abc" }))).fields.userId).toBe("That user doesn't exist.");
   });
 
-  test("rejects a bad type", () => {
-    const err = catchError(() => addNotification({ ...valid, type: "spam" }));
+  test("rejects a bad type", async () => {
+    const err = await catchError(() => addNotification({ ...valid, type: "spam" }));
     expect(err.fields.type).toBeDefined();
   });
 
-  test("rejects an empty or all-spaces title", () => {
-    expect(catchError(() => addNotification({ ...valid, title: "" })).fields.title).toBe("Title is required.");
-    expect(catchError(() => addNotification({ ...valid, title: "   " })).fields.title).toBe("Title is required.");
-    expect(catchError(() => addNotification({ ...valid, title: 42 })).fields.title).toBe("Title is required.");
+  test("title is required", async () => {
+    expect((await catchError(() => addNotification({ ...valid, title: "" }))).fields.title).toBe("Title is required.");
+    expect((await catchError(() => addNotification({ ...valid, title: "   " }))).fields.title).toBe("Title is required.");
+    expect((await catchError(() => addNotification({ ...valid, title: 42 }))).fields.title).toBe("Title is required.");
   });
 
-  test("title can be 100 chars but not 101", () => {
-    expect(addNotification({ ...valid, title: "a".repeat(100) }).title).toHaveLength(100);
-    const err = catchError(() => addNotification({ ...valid, title: "a".repeat(101) }));
-    expect(err.fields.title).toBe("Title must be 100 characters or less.");
+  test("title is limited to 100 characters", async () => {
+    expect((await addNotification({ ...valid, title: "a".repeat(100) })).title).toHaveLength(100);
+    const err = await catchError(() => addNotification({ ...valid, title: "a".repeat(101) }));
+    expect(err.fields.title).toBeDefined();
   });
 
-  test("rejects an empty message", () => {
-    expect(catchError(() => addNotification({ ...valid, message: " " })).fields.message).toBe("Message is required.");
+  test("message is required", async () => {
+    expect((await catchError(() => addNotification({ ...valid, message: " " }))).fields.message).toBe("Message is required.");
   });
 
-  test("message can be 300 chars but not 301", () => {
-    expect(addNotification({ ...valid, message: "a".repeat(300) }).message).toHaveLength(300);
-    const err = catchError(() => addNotification({ ...valid, message: "a".repeat(301) }));
-    expect(err.fields.message).toBe("Message must be 300 characters or less.");
+  test("message is limited to 300 characters", async () => {
+    expect((await addNotification({ ...valid, message: "a".repeat(300) })).message).toHaveLength(300);
+    const err = await catchError(() => addNotification({ ...valid, message: "a".repeat(301) }));
+    expect(err.fields.message).toBeDefined();
   });
 
-  test("reports every bad field at once and adds nothing", () => {
-    const before = store.notifications.length;
-    const err = catchError(() => addNotification());
+  test("an empty call reports every required field and saves nothing", async () => {
+    const before = await count("notifications");
+    const err = await catchError(() => addNotification());
     expect(Object.keys(err.fields).sort()).toEqual(["audience", "message", "title", "type"]);
-    expect(store.notifications).toHaveLength(before);
+    expect(await count("notifications")).toBe(before);
   });
 });
 
 describe("listNotifications", () => {
-  test("admin gets only admin notifications, newest first", () => {
-    const list = listNotifications("admin", 1);
-    expect(list.map((n) => n.id)).toEqual([1, 2]);
+  test("admin gets only admin notifications, newest first", async () => {
+    expect((await listNotifications("admin", 1)).map((n) => n.id)).toEqual([1, 2]);
   });
 
-  test("user gets only their own, newest first", () => {
-    expect(listNotifications("user", 6).map((n) => n.id)).toEqual([3, 4]);
-    expect(listNotifications("user", 3)).toEqual([]);
+  test("user gets only their own, newest first", async () => {
+    expect((await listNotifications("user", 6)).map((n) => n.id)).toEqual([3, 4]);
+    expect(await listNotifications("user", 3)).toEqual([]);
   });
 
-  test("two created at the same moment show the newer id first", () => {
-    const a = addNotification({ ...valid, userId: 6 });
-    const b = addNotification({ ...valid, userId: 6 });
-    b.createdAt = a.createdAt;
-    expect(listNotifications("user", 6).slice(0, 2).map((n) => n.id)).toEqual([b.id, a.id]);
+  test("two created at the same moment show the newer id first", async () => {
+    const a = await addNotification({ ...valid, userId: 6 });
+    const b = await addNotification({ ...valid, userId: 6 });
+    await query("UPDATE notifications SET created_at = $1 WHERE id IN ($2, $3)", [a.createdAt, a.id, b.id]);
+    expect((await listNotifications("user", 6)).slice(0, 2).map((n) => n.id)).toEqual([b.id, a.id]);
   });
 
-  test("a new notification comes first", () => {
-    const n = addNotification({ ...valid, userId: 6 });
-    expect(listNotifications("user", 6)[0].id).toBe(n.id);
+  test("a new notification comes first", async () => {
+    const n = await addNotification({ ...valid, userId: 6 });
+    expect((await listNotifications("user", 6))[0].id).toBe(n.id);
   });
 
-  test("rejects a bad audience", () => {
-    expect(catchError(() => listNotifications("nope", 6)).status).toBe(400);
+  test("seeded viewed notifications come back as read", async () => {
+    const list = await listNotifications("user", 6);
+    expect(list.map((n) => [n.id, n.read])).toEqual([[3, false], [4, true]]);
+  });
+
+  test("rejects a bad audience", async () => {
+    expect((await catchError(() => listNotifications("nope", 6))).status).toBe(400);
   });
 });
 
 describe("markAsRead", () => {
-  test("a user can mark their own", () => {
-    expect(markAsRead(3, demo).read).toBe(true);
-    expect(store.notifications.find((n) => n.id === 3).read).toBe(true);
+  test("a user can mark their own", async () => {
+    expect((await markAsRead(3, demo)).read).toBe(true);
+    expect((await query("SELECT status FROM notifications WHERE id = 3")).rows[0].status).toBe("viewed");
   });
 
-  test("a user can't mark someone else's", () => {
-    expect(catchError(() => markAsRead(3, diego)).status).toBe(403);
-    expect(store.notifications.find((n) => n.id === 3).read).toBe(false);
+  test("a user can't mark someone else's", async () => {
+    expect((await catchError(() => markAsRead(3, diego))).status).toBe(403);
+    expect((await query("SELECT status FROM notifications WHERE id = 3")).rows[0].status).toBe("sent");
   });
 
-  test("a user can't mark an admin one", () => {
-    expect(catchError(() => markAsRead(1, demo)).status).toBe(403);
+  test("a user can't mark an admin one", async () => {
+    expect((await catchError(() => markAsRead(1, demo))).status).toBe(403);
   });
 
-  test("an admin can mark admin ones", () => {
-    expect(markAsRead(1, admin).read).toBe(true);
+  test("an admin can mark admin ones", async () => {
+    expect((await markAsRead(1, admin)).read).toBe(true);
   });
 
-  test("404 when it doesn't exist", () => {
-    const err = catchError(() => markAsRead(999, demo));
+  test("404 when it doesn't exist", async () => {
+    const err = await catchError(() => markAsRead(999, demo));
     expect(err.status).toBe(404);
     expect(err.message).toBe("Notification not found.");
+  });
+
+  test("404 for an id too big for the database", async () => {
+    expect((await catchError(() => markAsRead("99999999999", demo))).status).toBe(404);
   });
 });
 
 describe("markAllAsRead", () => {
-  test("returns how many changed and only touches that user's", () => {
-    addNotification({ ...valid, userId: 6 });
-    addNotification({ ...valid, userId: 3 });
+  test("returns how many changed and only touches that user's", async () => {
+    await addNotification({ ...valid, userId: 6 });
+    await addNotification({ ...valid, userId: 3 });
 
-    expect(markAllAsRead("user", 6)).toBe(2);
-    expect(listNotifications("user", 6).every((n) => n.read)).toBe(true);
-    expect(listNotifications("user", 3)[0].read).toBe(false);
-    expect(markAllAsRead("user", 6)).toBe(0);
+    expect(await markAllAsRead("user", 6)).toBe(2);
+    expect((await listNotifications("user", 6)).every((n) => n.read)).toBe(true);
+    expect((await listNotifications("user", 3))[0].read).toBe(false);
+    expect(await markAllAsRead("user", 6)).toBe(0);
   });
 
-  test("admin marks all admin ones", () => {
-    expect(markAllAsRead("admin", 1)).toBe(1);
+  test("admin marks all admin ones", async () => {
+    expect(await markAllAsRead("admin", 1)).toBe(1);
   });
 
-  test("rejects a bad audience", () => {
-    expect(catchError(() => markAllAsRead("nope", 6)).status).toBe(400);
+  test("rejects a bad audience", async () => {
+    expect((await catchError(() => markAllAsRead("nope", 6))).status).toBe(400);
   });
 });
 
 describe("trigger helpers", () => {
-  test("notifyJoined", () => {
-    expect(notifyJoined(3, "Registrar", 4, 30)).toMatchObject({
+  test("notifyJoined", async () => {
+    expect(await notifyJoined(3, "Registrar", 4, 30)).toMatchObject({
       audience: "user",
       userId: 3,
       type: "queue_update",
@@ -188,12 +190,12 @@ describe("trigger helpers", () => {
     });
   });
 
-  test("notifyJoined uses you're next wording at position 1", () => {
-    expect(notifyJoined(3, "Registrar", 1, 0).message).toBe("You're next in line for Registrar.");
+  test("notifyJoined uses you're next wording at position 1", async () => {
+    expect((await notifyJoined(3, "Registrar", 1, 0)).message).toBe("You're next in line for Registrar.");
   });
 
-  test("notifyAlmostReady", () => {
-    expect(notifyAlmostReady(3, "Financial Aid")).toMatchObject({
+  test("notifyAlmostReady", async () => {
+    expect(await notifyAlmostReady(3, "Financial Aid")).toMatchObject({
       audience: "user",
       userId: 3,
       type: "status_change",
@@ -202,8 +204,8 @@ describe("trigger helpers", () => {
     });
   });
 
-  test("notifyServed", () => {
-    expect(notifyServed(3, "Financial Aid")).toMatchObject({
+  test("notifyServed", async () => {
+    expect(await notifyServed(3, "Financial Aid")).toMatchObject({
       audience: "user",
       userId: 3,
       type: "status_change",
@@ -212,8 +214,17 @@ describe("trigger helpers", () => {
     });
   });
 
-  test("notifyNewSignup", () => {
-    const n = notifyNewSignup("new.person@example.com");
+  test("notifyRemoved", async () => {
+    expect(await notifyRemoved(3, "Registrar")).toMatchObject({
+      audience: "user",
+      userId: 3,
+      title: "Removed from the queue",
+      message: "An admin removed you from the Registrar queue.",
+    });
+  });
+
+  test("notifyNewSignup", async () => {
+    const n = await notifyNewSignup("new.person@example.com");
     expect(n).toMatchObject({
       audience: "admin",
       type: "signup",

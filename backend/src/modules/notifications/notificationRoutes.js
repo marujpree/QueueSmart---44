@@ -17,19 +17,19 @@ const checkAudience = (req, res, next) => {
   next();
 };
 
-router.get("/", checkAudience, (req, res) => {
-  res.json({ notifications: listNotifications(req.query.audience, req.user.id) });
+router.get("/", checkAudience, async (req, res) => {
+  res.json({ notifications: await listNotifications(req.query.audience, req.user.id) });
 });
 
-router.patch("/read-all", checkAudience, (req, res) => {
-  res.json({ updated: markAllAsRead(req.query.audience, req.user.id) });
+router.patch("/read-all", checkAudience, async (req, res) => {
+  res.json({ updated: await markAllAsRead(req.query.audience, req.user.id) });
 });
 
-router.patch("/:id/read", (req, res) => {
+router.patch("/:id/read", async (req, res) => {
   if (!/^[1-9]\d*$/.test(req.params.id)) {
     throw badRequest("Notification id must be a positive integer.");
   }
-  res.json({ notification: markAsRead(req.params.id, req.user) });
+  res.json({ notification: await markAsRead(req.params.id, req.user) });
 });
 
 module.exports = router;
