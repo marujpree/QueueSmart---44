@@ -1,6 +1,8 @@
 const request = require("supertest");
 const app = require("../src/app");
 const { store, resetStore } = require("../src/data/store");
+const { query, resetTestDb } = require("../src/db/db");
+const { addUser, catchError } = require("./helpers");
 const {
   getQueue,
   getStatus,
@@ -10,45 +12,32 @@ const {
   getQueueSummary,
 } = require("../src/modules/queues/queueService");
 
-const addUser = (id) => {
-  store.users.push({ id, name: `Test User ${id}`, email: `test${id}@example.com`, role: "user" });
-  return id;
-};
-
-const catchError = (fn) => {
-  try {
-    fn();
-  } catch (err) {
-    return err;
-  }
-  throw new Error("expected an error");
-};
-
-beforeEach(() => {
+beforeEach(async () => {
   resetStore();
-  [7, 8, 9].forEach(addUser);
+  await resetTestDb();
+  for (const id of [7, 8, 9]) await addUser(id);
 });
 
 describe("getQueue ordering", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     store.queues[3] = [];
   });
 
-  test("a high priority joiner goes ahead of earlier medium ones", () => {
-    joinQueue(7, { serviceId: 3, priority: "medium" });
-    joinQueue(8, { serviceId: 3, priority: "medium" });
-    joinQueue(9, { serviceId: 3, priority: "high" });
+  test("a high priority joiner goes ahead of earlier medium ones", async () => {
+    await joinQueue(7, { serviceId: 3, priority: "medium" });
+    await joinQueue(8, { serviceId: 3, priority: "medium" });
+    await joinQueue(9, { serviceId: 3, priority: "high" });
     expect(getQueue(3).map((e) => e.userId)).toEqual([9, 7, 8]);
   });
 
-  test("same priority stays in arrival order, low goes last", () => {
-    joinQueue(7, { serviceId: 3, priority: "low" });
-    joinQueue(8, { serviceId: 3 });
-    joinQueue(9, { serviceId: 3 });
+  test("same priority stays in arrival order, low goes last", async () => {
+    await joinQueue(7, { serviceId: 3, priority: "low" });
+    await joinQueue(8, { serviceId: 3 });
+    await joinQueue(9, { serviceId: 3 });
     expect(getQueue(3).map((e) => e.userId)).toEqual([8, 9, 7]);
   });
 
-  test("earlier joinedAt goes first within a priority", () => {
+  test("earlier joinedAt goes first within a priority", async () => {
     store.queues[3] = [
       { id: 1, userId: 7, serviceId: 3, priority: "medium", status: "waiting", joinedAt: "2026-10-23T15:00:00.000Z" },
       { id: 2, userId: 8, serviceId: 3, priority: "medium", status: "waiting", joinedAt: "2026-10-23T14:00:00.000Z" },
@@ -56,17 +45,17 @@ describe("getQueue ordering", () => {
     expect(getQueue(3).map((e) => e.userId)).toEqual([8, 7]);
   });
 
-  test("served entries aren't in the line", () => {
+  test("served entries aren't in the line", async () => {
     expect(getQueue(2).map((e) => e.id)).toEqual([204, 205]);
   });
 
-  test("an unknown service has an empty line", () => {
+  test("an unknown service has an empty line", async () => {
     expect(getQueue(999)).toEqual([]);
   });
 });
 
 describe("getStatus", () => {
-  test("1 and 2 are almost ready, after that waiting", () => {
+  test("1 and 2 are almost ready, after that waiting", async () => {
     expect(getStatus(1)).toBe("almost ready");
     expect(getStatus(2)).toBe("almost ready");
     expect(getStatus(3)).toBe("waiting");
@@ -75,64 +64,64 @@ describe("getStatus", () => {
 });
 
 describe("joinQueue validation", () => {
-  test("missing serviceId", () => {
-    const err = catchError(() => joinQueue(7, {}));
+  test("missing serviceId", async () => {
+    const err = await catchError(() => joinQueue(7, {}));
     expect(err.status).toBe(400);
     expect(err.fields.serviceId).toBe("Pick a service.");
-    expect(catchError(() => joinQueue(7)).status).toBe(400);
+    expect((await catchError(() => joinQueue(7))).status).toBe(400);
   });
 
-  test("non-numeric or non-positive serviceId", () => {
+  test("non-numeric or non-positive serviceId", async () => {
     for (const serviceId of ["abc", "5abc", "0x2", "1e1", " 2", "2.0", "-1", 1.5, 0, -2, true, [2]]) {
-      const err = catchError(() => joinQueue(7, { serviceId }));
+      const err = await catchError(() => joinQueue(7, { serviceId }));
       expect(err.status).toBe(400);
       expect(err.fields.serviceId).toBe("Service id must be a positive integer.");
     }
   });
 
-  test("a numeric string serviceId is fine", () => {
+  test("a numeric string serviceId is fine", async () => {
     store.queues[3] = [];
-    expect(joinQueue(7, { serviceId: "3" }).entry.serviceId).toBe(3);
+    expect((await joinQueue(7, { serviceId: "3" })).entry.serviceId).toBe(3);
   });
 
-  test("unknown serviceId is 404", () => {
-    const err = catchError(() => joinQueue(7, { serviceId: 999 }));
+  test("unknown serviceId is 404", async () => {
+    const err = await catchError(() => joinQueue(7, { serviceId: 999 }));
     expect(err.status).toBe(404);
     expect(err.message).toBe("Service not found.");
   });
 
-  test("closed service is 409", () => {
+  test("closed service is 409", async () => {
     store.services.find((s) => s.id === 1).isOpen = false;
-    const err = catchError(() => joinQueue(7, { serviceId: 1 }));
+    const err = await catchError(() => joinQueue(7, { serviceId: 1 }));
     expect(err.status).toBe(409);
     expect(err.message).toBe("This service is closed.");
   });
 
-  test("bad priority", () => {
-    const err = catchError(() => joinQueue(7, { serviceId: 1, priority: "urgent" }));
+  test("bad priority", async () => {
+    const err = await catchError(() => joinQueue(7, { serviceId: 1, priority: "urgent" }));
     expect(err.status).toBe(400);
     expect(err.fields.priority).toBeDefined();
   });
 
-  test("priority defaults to medium", () => {
-    expect(joinQueue(7, { serviceId: 1 }).entry.priority).toBe("medium");
+  test("priority defaults to medium", async () => {
+    expect((await joinQueue(7, { serviceId: 1 })).entry.priority).toBe("medium");
   });
 
-  test("can't join while already in a queue", () => {
-    joinQueue(7, { serviceId: 1 });
-    const err = catchError(() => joinQueue(7, { serviceId: 2 }));
+  test("can't join while already in a queue", async () => {
+    await joinQueue(7, { serviceId: 1 });
+    const err = await catchError(() => joinQueue(7, { serviceId: 2 }));
     expect(err.status).toBe(409);
     expect(err.message).toBe("You're already in a queue.");
 
-    expect(catchError(() => joinQueue(3, { serviceId: 2 })).status).toBe(409);
+    expect((await catchError(() => joinQueue(3, { serviceId: 2 }))).status).toBe(409);
   });
 });
 
 describe("joinQueue", () => {
-  test("adds an entry with the user's name and returns position and wait", () => {
+  test("adds an entry with the user's name and returns position and wait", async () => {
     store.queues[2] = [];
-    joinQueue(7, { serviceId: 2 });
-    const result = joinQueue(8, { serviceId: 2, priority: "low" });
+    await joinQueue(7, { serviceId: 2 });
+    const result = await joinQueue(8, { serviceId: 2, priority: "low" });
 
     expect(result).toMatchObject({ serviceName: "Financial Aid", position: 2, waitMinutes: 10, status: "almost ready" });
     expect(result.entry).toMatchObject({ userId: 8, name: "Test User 8", serviceId: 2, priority: "low", status: "waiting" });
@@ -140,106 +129,108 @@ describe("joinQueue", () => {
     expect(store.queues[2]).toContain(result.entry);
   });
 
-  test("demo student starts out of every queue and can join", () => {
+  test("demo student starts out of every queue and can join", async () => {
     expect(getMyEntry(6)).toBeNull();
-    expect(joinQueue(6, { serviceId: 3 })).toMatchObject({ serviceName: "ID Card Services", position: 1 });
+    expect(await joinQueue(6, { serviceId: 3 })).toMatchObject({ serviceName: "ID Card Services", position: 1 });
   });
 
-  test("a new joiner goes behind seeded people with the same priority", () => {
-    expect(joinQueue(7, { serviceId: 2 }).position).toBe(3);
+  test("a new joiner goes behind seeded people with the same priority", async () => {
+    expect((await joinQueue(7, { serviceId: 2 })).position).toBe(3);
   });
 
-  test("gives the entry a new id across all queues", () => {
-    expect(joinQueue(7, { serviceId: 1 }).entry.id).toBe(406);
+  test("gives the entry a new id across all queues", async () => {
+    expect((await joinQueue(7, { serviceId: 1 })).entry.id).toBe(406);
   });
 
-  test("creates the queue if the service didn't have one", () => {
+  test("creates the queue if the service didn't have one", async () => {
     delete store.queues[3];
-    expect(joinQueue(7, { serviceId: 3 }).position).toBe(1);
+    expect((await joinQueue(7, { serviceId: 3 })).position).toBe(1);
     expect(store.queues[3]).toHaveLength(1);
   });
 
-  test("creates a queue_update notification with the right position", () => {
+  test("creates a queue_update notification with the right position", async () => {
     store.queues[2] = [];
-    joinQueue(7, { serviceId: 2 });
-    joinQueue(8, { serviceId: 2 });
+    await joinQueue(7, { serviceId: 2 });
+    await joinQueue(8, { serviceId: 2 });
 
-    const note = store.notifications.find((n) => n.userId === 8);
-    expect(note).toMatchObject({ audience: "user", type: "queue_update", read: false });
+    const { rows } = await query("SELECT * FROM notifications WHERE user_id = 8");
+    const note = rows[0];
+    expect(note).toMatchObject({ audience: "user", type: "queue_update", status: "sent" });
     expect(note.message).toBe("You're #2 in line for Financial Aid, about 10 min wait.");
   });
 });
 
 describe("getMyEntry", () => {
-  test("null when not in a queue", () => {
+  test("null when not in a queue", async () => {
     expect(getMyEntry(7)).toBeNull();
   });
 
-  test("position, wait and status", () => {
+  test("position, wait and status", async () => {
     store.queues[4] = [];
-    joinQueue(7, { serviceId: 4 });
-    joinQueue(8, { serviceId: 4 });
-    joinQueue(9, { serviceId: 4 });
+    await joinQueue(7, { serviceId: 4 });
+    await joinQueue(8, { serviceId: 4 });
+    await joinQueue(9, { serviceId: 4 });
 
     expect(getMyEntry(7)).toMatchObject({ serviceName: "Registrar", position: 1, waitMinutes: 0, status: "almost ready" });
     expect(getMyEntry(8)).toMatchObject({ position: 2, waitMinutes: 20, status: "almost ready" });
     expect(getMyEntry(9)).toMatchObject({ position: 3, waitMinutes: 40, status: "waiting" });
   });
 
-  test("moves up when someone ahead leaves", () => {
+  test("moves up when someone ahead leaves", async () => {
     store.queues[4] = [];
-    joinQueue(7, { serviceId: 4 });
-    joinQueue(8, { serviceId: 4 });
-    leaveQueue(7);
+    await joinQueue(7, { serviceId: 4 });
+    await joinQueue(8, { serviceId: 4 });
+    await leaveQueue(7);
     expect(getMyEntry(8)).toMatchObject({ position: 1, waitMinutes: 0 });
   });
 });
 
 describe("leaveQueue", () => {
-  test("a new joiner never gets the id of an entry that left", () => {
-    const first = joinQueue(7, { serviceId: 1 }).entry.id;
-    leaveQueue(7);
-    const second = joinQueue(8, { serviceId: 1 }).entry.id;
+  test("a new joiner never gets the id of an entry that left", async () => {
+    const first = (await joinQueue(7, { serviceId: 1 })).entry.id;
+    await leaveQueue(7);
+    const second = (await joinQueue(8, { serviceId: 1 })).entry.id;
     expect(second).not.toBe(first);
     expect(second).toBe(first + 1);
   });
 
-  test("leaving twice in a row leaves nothing behind", () => {
-    joinQueue(7, { serviceId: 1 });
-    leaveQueue(7);
+  test("leaving twice in a row leaves nothing behind", async () => {
+    await joinQueue(7, { serviceId: 1 });
+    await leaveQueue(7);
     expect(Object.values(store.queues).flat().filter((e) => e.userId === 7)).toEqual([]);
-    expect(() => leaveQueue(7)).toThrow("You're not in a queue.");
+    await expect(leaveQueue(7)).rejects.toThrow("You're not in a queue.");
   });
 
-  test("removes the entry and writes a Left queue history row", () => {
-    const { entry } = joinQueue(7, { serviceId: 1 });
+  test("removes the entry and writes a Left queue history row", async () => {
+    const { entry } = await joinQueue(7, { serviceId: 1 });
 
-    expect(leaveQueue(7)).toEqual({ left: true, serviceName: "Academic Advising" });
+    expect(await leaveQueue(7)).toEqual({ left: true, serviceName: "Academic Advising" });
     expect(store.queues[1]).not.toContain(entry);
     expect(getMyEntry(7)).toBeNull();
-    expect(store.history.at(-1)).toMatchObject({ userId: 7, serviceId: 1, serviceName: "Academic Advising", outcome: "Left queue" });
+    const { rows } = await query("SELECT * FROM queue_history WHERE user_id = 7");
+    expect(rows).toMatchObject([{ service_id: 1, service_name: "Academic Advising", outcome: "Left queue" }]);
   });
 
-  test("404 when not in a queue", () => {
-    const err = catchError(() => leaveQueue(7));
+  test("404 when not in a queue", async () => {
+    const err = await catchError(() => leaveQueue(7));
     expect(err.status).toBe(404);
     expect(err.message).toBe("You're not in a queue.");
   });
 });
 
 describe("getQueueSummary", () => {
-  test("waiting count and the wait for someone joining now", () => {
+  test("waiting count and the wait for someone joining now", async () => {
     expect(getQueueSummary(2)).toEqual({ serviceId: 2, waiting: 2, estimatedWaitMinutes: 20 });
     expect(getQueueSummary("4")).toEqual({ serviceId: 4, waiting: 1, estimatedWaitMinutes: 20 });
   });
 
-  test("an empty line has no wait", () => {
+  test("an empty line has no wait", async () => {
     store.queues[3] = [];
     expect(getQueueSummary(3)).toEqual({ serviceId: 3, waiting: 0, estimatedWaitMinutes: 0 });
   });
 
-  test("404 for an unknown service", () => {
-    expect(catchError(() => getQueueSummary(999)).status).toBe(404);
+  test("404 for an unknown service", async () => {
+    expect((await catchError(() => getQueueSummary(999))).status).toBe(404);
   });
 });
 

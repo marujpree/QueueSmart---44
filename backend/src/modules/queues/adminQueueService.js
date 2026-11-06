@@ -14,22 +14,22 @@ const getQueueDetails = (serviceId) => {
 };
 
 //add next served person controlled by admin advancing the queue
-const serveNext = (serviceId) => {
+const serveNext = async (serviceId) => {
   const service = getService(serviceId);
   const entry = getQueue(service.id)[0];
   if (!entry) throw conflict("No one waiting for this service.");
   entry.status = "served";
   entry.servedAt = new Date().toISOString();
-  addHistory({ userId: entry.userId, serviceId: service.id, serviceName: service.name, outcome: "Served", entryId: entry.id });
-  notifyServed(entry.userId, service.name);
+  await addHistory({ userId: entry.userId, serviceId: service.id, serviceName: service.name, outcome: "Served", entryId: entry.id });
+  await notifyServed(entry.userId, service.name);
 
-  getQueue(service.id)
+  const almostReady = getQueue(service.id)
     .slice(0, 2)
-    .filter((next) => !next.almostReadyNotified)
-    .forEach((next) => {
-      next.almostReadyNotified = true;
-      notifyAlmostReady(next.userId, service.name);
-    });
+    .filter((next) => !next.almostReadyNotified);
+  for (const next of almostReady) {
+    next.almostReadyNotified = true;
+    await notifyAlmostReady(next.userId, service.name);
+  }
   return { servedEntry: entry, ...getQueueDetails(service.id) };
 };
 
@@ -42,18 +42,18 @@ const findEntry = (serviceId, entryId) => {
   return { service, entry };
 }
 
-const removeEntry = (serviceId, entryId) => {
+const removeEntry = async (serviceId, entryId) => {
   const { service, entry } = findEntry(serviceId, entryId);
   const queue = store.queues[service.id];
   queue.splice(queue.indexOf(entry), 1);
-  addHistory({
+  await addHistory({
     userId: entry.userId,
     serviceId: service.id,
     serviceName: service.name,
     outcome: "Removed by admin",
     entryId: entry.id,
   });
-  notifyRemoved(entry.userId, service.name);
+  await notifyRemoved(entry.userId, service.name);
   return getQueueDetails(service.id)
 };
 

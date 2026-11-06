@@ -6,8 +6,8 @@ const router = express.Router();
 
 router.use(requireUser);
 
-router.get("/", (req, res) => {
-    res.json({ history: getHistory(req.user.id) })
+router.get("/", async (req, res) => {
+  res.json({ history: await getHistory(req.user.id) });
 });
 
 module.exports = router;

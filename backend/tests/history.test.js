@@ -1,91 +1,112 @@
-﻿const request = require("supertest");
+const request = require("supertest");
 const app = require("../src/app");
 const { store, resetStore } = require("../src/data/store");
+const { query, resetTestDb } = require("../src/db/db");
 const { getHistory, addHistory } = require("../src/modules/history/historyService");
 const { joinQueue, leaveQueue, serveNext } = require("../src/modules/queues/queueService");
+const { addUser, count } = require("./helpers");
 
-const addUser = (id) => {
-  store.users.push({ id, name: `Test User ${id}`, email: `test${id}@example.com`, role: "user" });
-  return id;
-};
-
-beforeEach(() => {
+beforeEach(async () => {
   resetStore();
-  [7, 8, 9].forEach(addUser);
+  await resetTestDb();
+  for (const id of [7, 8, 9]) await addUser(id);
 });
 
+const notificationsAfter = async (lastId) =>
+  (await query("SELECT user_id, title FROM notifications WHERE id > $1 ORDER BY id", [lastId])).rows.map((n) => [n.user_id, n.title]);
+const lastNotificationId = async () => (await query("SELECT MAX(id)::int AS id FROM notifications")).rows[0].id;
+
 describe("getHistory", () => {
-  test("returns only that user's rows", () => {
-    expect(getHistory(6)).toHaveLength(3);
-    expect(getHistory(6).every((row) => row.userId === 6)).toBe(true);
+  test("returns only that user's rows", async () => {
+    expect(await getHistory(6)).toHaveLength(3);
+    expect((await getHistory(6)).every((row) => row.userId === 6)).toBe(true);
   });
 
-  test("newest first", () => {
-    const dates = getHistory(6).map((row) => row.date);
+  test("returns camelCase rows with an ISO date", async () => {
+    const [row] = await getHistory(6);
+    expect(Object.keys(row).sort()).toEqual(["date", "entryId", "id", "outcome", "serviceId", "serviceName", "userId"]);
+    expect(new Date(row.date).toISOString()).toBe(row.date);
+  });
+
+  test("newest first", async () => {
+    const dates = (await getHistory(6)).map((row) => row.date);
     expect(dates).toEqual([...dates].sort().reverse());
   });
 
-  test("empty array for someone with no history", () => {
-    expect(getHistory(7)).toEqual([]);
+  test("empty array for someone with no history", async () => {
+    expect(await getHistory(7)).toEqual([]);
   });
 
-  test("does not reorder the stored history", () => {
-    const before = store.history.map((row) => row.id);
-    getHistory(6);
-    expect(store.history.map((row) => row.id)).toEqual(before);
+  test("picks up a row written by addHistory", async () => {
+    await addHistory({ userId: 7, serviceId: 1, serviceName: "Academic Advising", outcome: "Served" });
+    expect(await getHistory(7)).toMatchObject([{ serviceName: "Academic Advising", outcome: "Served" }]);
   });
 
-  test("picks up a row written by addHistory", () => {
-    addHistory({ userId: 7, serviceId: 1, serviceName: "Academic Advising", outcome: "Served" });
-    expect(getHistory(7)).toMatchObject([{ serviceName: "Academic Advising", outcome: "Served" }]);
+  test("a brand new row sorts ahead of the old ones", async () => {
+    await addHistory({ userId: 6, serviceId: 1, serviceName: "Academic Advising", outcome: "Served" });
+    expect(await getHistory(6)).toHaveLength(4);
+    expect((await getHistory(6))[0].serviceName).toBe("Academic Advising");
   });
 
-  test("a brand new row sorts ahead of the old ones", () => {
-    addHistory({ userId: 6, serviceId: 1, serviceName: "Academic Advising", outcome: "Served" });
-    expect(getHistory(6)).toHaveLength(4);
-    expect(getHistory(6)[0].serviceName).toBe("Academic Advising");
+  test("a second outcome for the same entry updates the row instead of adding one", async () => {
+    await addHistory({ userId: 7, serviceId: 1, serviceName: "Academic Advising", outcome: "Waiting", entryId: 500 });
+    await addHistory({ userId: 7, serviceId: 1, serviceName: "Academic Advising", outcome: "Served", entryId: 500 });
+    expect(await getHistory(7)).toMatchObject([{ outcome: "Served", entryId: 500 }]);
+    expect(await count("queue_history", "user_id = 7")).toBe(1);
+  });
+
+  test("rows without an entry id are always inserted", async () => {
+    await addHistory({ userId: 7, serviceName: "Walk-up", outcome: "Served" });
+    await addHistory({ userId: 7, serviceName: "Walk-up", outcome: "Served" });
+    expect(await getHistory(7)).toHaveLength(2);
+    expect((await getHistory(7))[0]).toMatchObject({ serviceId: null, entryId: null });
   });
 });
 
 describe("leaving and being served both write history", () => {
-  test("leaving a queue writes a Left queue row", () => {
-    joinQueue(7, { serviceId: 3 });
-    leaveQueue(7);
-    expect(getHistory(7)).toMatchObject([{ serviceName: "ID Card Services", outcome: "Left queue" }]);
+  test("joining writes a Waiting row", async () => {
+    await joinQueue(7, { serviceId: 3 });
+    expect(await getHistory(7)).toMatchObject([{ serviceName: "ID Card Services", outcome: "Waiting" }]);
   });
 
-  test("being served writes a Served row", () => {
-    joinQueue(7, { serviceId: 3 });
-    serveNext(3);
-    expect(getHistory(7)).toMatchObject([{ serviceName: "ID Card Services", outcome: "Served" }]);
+  test("leaving a queue writes a Left queue row", async () => {
+    await joinQueue(7, { serviceId: 3 });
+    await leaveQueue(7);
+    expect(await getHistory(7)).toMatchObject([{ serviceName: "ID Card Services", outcome: "Left queue" }]);
+  });
+
+  test("being served writes a Served row", async () => {
+    await joinQueue(7, { serviceId: 3 });
+    await serveNext(3);
+    expect(await getHistory(7)).toMatchObject([{ serviceName: "ID Card Services", outcome: "Served" }]);
   });
 });
 
 describe("serveNext notifications", () => {
-  test("tells the person served and the next two in line", () => {
-    [7, 8, 9].forEach((id) => joinQueue(id, { serviceId: 3 }));
-    const before = store.notifications.length;
-    serveNext(3);
-    expect(store.notifications.slice(before).map((n) => [n.userId, n.title])).toEqual([
+  test("tells the person served and the next two in line", async () => {
+    for (const id of [7, 8, 9]) await joinQueue(id, { serviceId: 3 });
+    const last = await lastNotificationId();
+    await serveNext(3);
+    expect(await notificationsAfter(last)).toEqual([
       [7, "You've been served"],
       [8, "Almost your turn"],
       [9, "Almost your turn"],
     ]);
   });
 
-  test("only notifies people who are actually waiting", () => {
-    joinQueue(7, { serviceId: 3 });
-    joinQueue(8, { serviceId: 3 });
-    const before = store.notifications.length;
-    serveNext(3);
-    expect(store.notifications.slice(before)).toHaveLength(2);
+  test("only notifies people who are actually waiting", async () => {
+    await joinQueue(7, { serviceId: 3 });
+    await joinQueue(8, { serviceId: 3 });
+    const last = await lastNotificationId();
+    await serveNext(3);
+    expect(await notificationsAfter(last)).toHaveLength(2);
   });
 
-  test("serving the last person notifies nobody else", () => {
-    joinQueue(7, { serviceId: 3 });
-    const before = store.notifications.length;
-    serveNext(3);
-    expect(store.notifications.slice(before)).toHaveLength(1);
+  test("serving the last person notifies nobody else", async () => {
+    await joinQueue(7, { serviceId: 3 });
+    const last = await lastNotificationId();
+    await serveNext(3);
+    expect(await notificationsAfter(last)).toHaveLength(1);
   });
 });
 
@@ -107,7 +128,7 @@ describe("GET /api/history", () => {
   });
 
   test("a served visit shows up over the API", async () => {
-    joinQueue(7, { serviceId: 3 });
+    await joinQueue(7, { serviceId: 3 });
     await request(app).post("/api/queues/3/serve-next").set("x-user-id", "1").expect(200);
     const res = await request(app).get("/api/history").set("x-user-id", "7");
     expect(res.body.history[0]).toMatchObject({ serviceName: "ID Card Services", outcome: "Served" });

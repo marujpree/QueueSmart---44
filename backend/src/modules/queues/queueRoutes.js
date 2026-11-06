@@ -9,12 +9,12 @@ router.get("/me", requireUser, (req, res) => {
   res.json(getMyEntry(req.user.id) || { entry: null });
 });
 
-router.post("/join", requireUser, (req, res) => {
-  res.status(201).json(joinQueue(req.user.id, req.body));
+router.post("/join", requireUser, async (req, res) => {
+  res.status(201).json(await joinQueue(req.user.id, req.body));
 });
 
-router.post("/leave", requireUser, (req, res) => {
-  res.json(leaveQueue(req.user.id));
+router.post("/leave", requireUser, async (req, res) => {
+  res.json(await leaveQueue(req.user.id));
 });
 
 // public so the join page can show waits before signing in
@@ -26,12 +26,12 @@ router.get("/:serviceId/entries", requireAdmin, (req, res) => {
   res.json(getQueueDetails(req.params.serviceId));
 });
 
-router.post("/:serviceId/serve-next", requireAdmin, (req, res) => {
-  res.json(serveNext(req.params.serviceId));
+router.post("/:serviceId/serve-next", requireAdmin, async (req, res) => {
+  res.json(await serveNext(req.params.serviceId));
 });
 
-router.delete("/:serviceId/entries/:entryId", requireAdmin, (req, res) => {
-  res.json(removeEntry(req.params.serviceId, req.params.entryId));
+router.delete("/:serviceId/entries/:entryId", requireAdmin, async (req, res) => {
+  res.json(await removeEntry(req.params.serviceId, req.params.entryId));
 });
 
 router.patch("/:serviceId/entries/:entryId", requireAdmin, (req, res) => {

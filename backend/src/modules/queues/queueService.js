@@ -1,4 +1,5 @@
 const { store, nextId } = require("../../data/store");
+const { query } = require("../../db/db");
 const { badRequest, notFound, conflict } = require("../../utils/httpError");
 const { getService } = require("../services/service");
 const { estimateWait } = require("../waitTime/waitTimeService");
@@ -43,7 +44,7 @@ const isPositiveInteger = (value) =>
   (typeof value === "number" && Number.isSafeInteger(value) && value > 0) ||
   (typeof value === "string" && /^[1-9]\d*$/.test(value));
 
-const joinQueue = (userId, { serviceId, priority } = {}) => {
+const joinQueue = async (userId, { serviceId, priority } = {}) => {
   const fields = {};
 
   if (serviceId === undefined || serviceId === null || serviceId === "") {
@@ -65,7 +66,8 @@ const joinQueue = (userId, { serviceId, priority } = {}) => {
   if (!service.isOpen) throw conflict("This service is closed.");
   if (findWaitingEntry(userId)) throw conflict("You're already in a queue.");
 
-  const user = store.users.find((u) => u.id === userId);
+  const { rows: userRows } = await query("SELECT full_name FROM user_profiles WHERE user_id = $1", [userId]);
+  const user = { name: userRows[0]?.full_name ?? "" };
   const entry = {
     id: nextId("queues"),
     userId,
@@ -79,14 +81,14 @@ const joinQueue = (userId, { serviceId, priority } = {}) => {
   if (!store.queues[service.id]) store.queues[service.id] = [];
   store.queues[service.id].push(entry);
 
-  addHistory({ userId, serviceId: service.id, serviceName: service.name, outcome: "Waiting", entryId: entry.id });
+  await addHistory({ userId, serviceId: service.id, serviceName: service.name, outcome: "Waiting", entryId: entry.id });
 
   const result = describeEntry(entry);
-  notifyJoined(userId, service.name, result.position, result.waitMinutes);
+  await notifyJoined(userId, service.name, result.position, result.waitMinutes);
   return result;
 };
 
-const leaveQueue = (userId) => {
+const leaveQueue = async (userId) => {
   const entry = findWaitingEntry(userId);
   if (!entry) throw notFound("You're not in a queue.");
 
@@ -94,7 +96,7 @@ const leaveQueue = (userId) => {
   queue.splice(queue.indexOf(entry), 1);
 
   const service = getService(entry.serviceId);
-  addHistory({ userId, serviceId: entry.serviceId, serviceName: service.name, outcome: "Left queue", entryId: entry.id });
+  await addHistory({ userId, serviceId: entry.serviceId, serviceName: service.name, outcome: "Left queue", entryId: entry.id });
   return { left: true, serviceName: service.name };
 };
 
