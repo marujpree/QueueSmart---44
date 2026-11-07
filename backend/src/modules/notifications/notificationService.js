@@ -1,4 +1,4 @@
-const { store, nextId } = require("../../data/store");
+const { query } = require("../../db/db");
 const { badRequest, forbidden, notFound } = require("../../utils/httpError");
 
 const audiences = ["admin", "user"];
@@ -14,19 +14,32 @@ const checkAudience = (audience) => {
   }
 };
 
-// admins see every admin notif
-const belongsTo = (n, audience, userId) =>
-  n.audience === audience && (audience === "admin" || n.userId === userId);
+const toNotification = (row) => ({
+  id: row.id,
+  audience: row.audience,
+  ...(row.audience === "user" && { userId: row.user_id }),
+  type: row.type,
+  title: row.title,
+  message: row.message,
+  createdAt: new Date(row.created_at).toISOString(),
+  read: row.status === "viewed",
+});
+
+// admins see every admin notif, users only their own
+const audienceFilter = (audience, userId) =>
+  audience === "admin"
+    ? { where: "audience = 'admin'", params: [] }
+    : { where: "audience = 'user' AND user_id = $1", params: [userId] };
 
 // newest first
-const listNotifications = (audience, userId) => {
+const listNotifications = async (audience, userId) => {
   checkAudience(audience);
-  return store.notifications
-    .filter((n) => belongsTo(n, audience, userId))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id);
+  const { where, params } = audienceFilter(audience, userId);
+  const { rows } = await query(`SELECT * FROM notifications WHERE ${where} ORDER BY created_at DESC, id DESC`, params);
+  return rows.map(toNotification);
 };
 
-const addNotification = ({ audience, userId, type, title, message } = {}) => {
+const addNotification = async ({ audience, userId, type, title, message } = {}) => {
   const fields = {};
 
   if (!audiences.includes(audience)) {
@@ -36,8 +49,12 @@ const addNotification = ({ audience, userId, type, title, message } = {}) => {
   if (audience === "user") {
     if (userId === undefined || userId === null || userId === "") {
       fields.userId = "User is required for a user notification.";
-    } else if (!store.users.some((u) => u.id === Number(userId))) {
-      fields.userId = "That user doesn't exist.";
+    } else {
+      const id = Number(userId);
+      const found = Number.isSafeInteger(id) && id > 0
+        ? (await query("SELECT 1 FROM user_credentials WHERE id = $1", [id])).rowCount > 0
+        : false;
+      if (!found) fields.userId = "That user doesn't exist.";
     }
   }
 
@@ -61,45 +78,36 @@ const addNotification = ({ audience, userId, type, title, message } = {}) => {
     throw badRequest("Notification is not valid.", fields);
   }
 
-  const notification = {
-    id: nextId("notifications"),
-    audience,
-    ...(audience === "user" && { userId: Number(userId) }),
-    type,
-    title: title.trim(),
-    message: message.trim(),
-    createdAt: new Date().toISOString(),
-    read: false,
-  };
-
-  store.notifications.push(notification);
-  return notification;
+  const { rows } = await query(
+    `INSERT INTO notifications (user_id, audience, type, title, message)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [audience === "user" ? Number(userId) : null, audience, type, title.trim(), message.trim()]
+  );
+  return toNotification(rows[0]);
 };
 
-const markAsRead = (id, requester) => {
-  const notification = store.notifications.find((n) => n.id === Number(id));
-  if (!notification) throw notFound("Notification not found.");
+const markAsRead = async (id, requester) => {
+  // ids are 32-bit ints in the database
+  const numericId = Number(id);
+  const { rows } = numericId > 2147483647 ? { rows: [] } : await query("SELECT * FROM notifications WHERE id = $1", [numericId]);
+  if (!rows.length) throw notFound("Notification not found.");
 
+  const notification = rows[0];
   const allowed = notification.audience === "admin"
     ? requester.role === "admin"
-    : notification.userId === requester.id;
+    : notification.user_id === requester.id;
   if (!allowed) throw forbidden("You can only mark your own notifications as read.");
 
-  notification.read = true;
-  return notification;
+  const updated = await query("UPDATE notifications SET status = 'viewed' WHERE id = $1 RETURNING *", [notification.id]);
+  return toNotification(updated.rows[0]);
 };
 
 // how many unread to read
-const markAllAsRead = (audience, userId) => {
+const markAllAsRead = async (audience, userId) => {
   checkAudience(audience);
-  let changed = 0;
-  for (const n of store.notifications) {
-    if (belongsTo(n, audience, userId) && !n.read) {
-      n.read = true;
-      changed += 1;
-    }
-  }
-  return changed;
+  const { where, params } = audienceFilter(audience, userId);
+  const { rowCount } = await query(`UPDATE notifications SET status = 'viewed' WHERE ${where} AND status = 'sent'`, params);
+  return rowCount;
 };
 
 // trigger helpers

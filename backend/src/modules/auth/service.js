@@ -49,8 +49,12 @@ const register = async (body) => {
     if (err.code === "23505") throw conflict("An account with that email already exists.");
     throw err;
   }
-  // Notifications remain in the legacy module until its own migration.
-  notifyNewSignup(user.email);
+  // the account exists either way, so a failed notification shouldn't fail the sign up
+  try {
+    await notifyNewSignup(user.email);
+  } catch (err) {
+    console.error("Could not create the signup notification:", err.message);
+  }
   return user;
 };
 

@@ -1,7 +1,12 @@
+jest.mock("../src/modules/notifications/notificationService", () => {
+  const actual = jest.requireActual("../src/modules/notifications/notificationService");
+  return { ...actual, notifyNewSignup: jest.fn(actual.notifyNewSignup) };
+});
 const request = require("supertest");
 const app = require("../src/app");
 const { query } = require("../src/db/db");
 const { store, resetStore } = require("../src/data/store");
+const { notifyNewSignup } = require("../src/modules/notifications/notificationService");
 
 beforeEach(() => {
   resetStore();
@@ -23,6 +28,22 @@ describe("POST /api/auth/register", () => {
     });
     expect(JSON.stringify(res.body)).not.toMatch(/password/i);
     expect((await query("SELECT * FROM user_profiles")).rowCount).toBe(7);
+  });
+
+  test("tells the admins about the new signup", async () => {
+    await request(app).post("/api/auth/register").send(valid);
+    const { rows } = await query("SELECT message FROM notifications WHERE type = 'signup' ORDER BY id DESC LIMIT 1");
+    expect(rows[0].message).toBe("new.person@example.com just created an account.");
+  });
+
+  test("still creates the account when the signup notification fails", async () => {
+    const spy = jest.spyOn(console, "error").mockImplementation(() => {});
+    notifyNewSignup.mockRejectedValueOnce(new Error("boom"));
+    const res = await request(app).post("/api/auth/register").send(valid);
+    expect(res.status).toBe(201);
+    expect((await query("SELECT 1 FROM user_credentials WHERE email = $1", [valid.email])).rowCount).toBe(1);
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
   });
 
   test("lowercases the email and trims the names", async () => {

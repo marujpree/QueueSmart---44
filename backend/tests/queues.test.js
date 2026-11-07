@@ -224,14 +224,16 @@ describe("joinQueue", () => {
     await joinQueue(7, { serviceId: 2 });
     await joinQueue(8, { serviceId: 2 });
 
-    const note = store.notifications.find((n) => n.userId === 8);
-    expect(note).toMatchObject({ audience: "user", type: "queue_update", read: false });
+    const { rows } = await query("SELECT * FROM notifications WHERE user_id = 8");
+    const note = rows[0];
+    expect(note).toMatchObject({ audience: "user", type: "queue_update", status: "sent" });
     expect(note.message).toBe("You're #2 in line for Financial Aid, about 10 min wait.");
   });
 
   test("writes a Waiting history row", async () => {
     const { entry } = await joinQueue(7, { serviceId: 1 });
-    expect(store.history.at(-1)).toMatchObject({ userId: 7, serviceId: 1, serviceName: "Academic Advising", outcome: "Waiting", entryId: entry.id });
+    const { rows } = await query("SELECT * FROM queue_history WHERE user_id = 7");
+    expect(rows).toMatchObject([{ service_id: 1, service_name: "Academic Advising", outcome: "Waiting", entry_id: entry.id }]);
   });
 
   test("a unique violation from the database still answers 409", async () => {
@@ -331,7 +333,8 @@ describe("leaveQueue", () => {
     expect(rows[0].status).toBe("canceled");
     expect(new Date(rows[0].updated_at).getTime()).toBeGreaterThanOrEqual(new Date(entry.joinedAt).getTime());
     expect(await getMyEntry(7)).toBeNull();
-    expect(store.history.at(-1)).toMatchObject({ userId: 7, serviceId: 1, serviceName: "Academic Advising", outcome: "Left queue" });
+    const history = await query("SELECT * FROM queue_history WHERE user_id = 7");
+    expect(history.rows).toMatchObject([{ service_id: 1, service_name: "Academic Advising", outcome: "Left queue", entry_id: entry.id }]);
   });
 
   test("shifts the people behind up by one", async () => {
