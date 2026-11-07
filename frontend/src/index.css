@@ -1,9 +1,6 @@
 :root { --font: system-ui, -apple-system, "Segoe UI", sans-serif; }
 body { margin: 0; font-family: var(--font); background: var(--bg); }
 button, input, select, textarea { font-family: inherit; }
-.navbar { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; padding: 0.75rem 1rem; background: #1f2937; color: #fff; }
-.navbar a { color: #cbd5e1; text-decoration: none; }
-.navbar a.active { color: #fff; font-weight: 600; text-decoration: underline; }
 .container { padding: 1rem; }
 
 :root {

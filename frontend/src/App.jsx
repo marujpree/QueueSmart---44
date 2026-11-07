@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
-import Navbar from './components/Navbar';
+import RequireRole from './components/RouteGuards';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import UserDashboard from './pages/UserDashboard';
@@ -14,7 +14,6 @@ import QueueManagement from './pages/QueueManagement';
 export default function App() {
   return (
     <>
-      <Navbar />
       <main className="container">
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
@@ -22,16 +21,16 @@ export default function App() {
           <Route path="/register" element={<Register />} />
 
           {/* User screens */}
-          <Route path="/dashboard" element={<UserDashboard />} />
-          <Route path="/join" element={<JoinQueue />} />
-          <Route path="/status" element={<QueueStatus />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/history" element={<History />} />
+          <Route path="/dashboard" element={<RequireRole role="user"><UserDashboard /></RequireRole>} />
+          <Route path="/join" element={<RequireRole role="user"><JoinQueue /></RequireRole>} />
+          <Route path="/status" element={<RequireRole role="user"><QueueStatus /></RequireRole>} />
+          <Route path="/profile" element={<RequireRole role="user"><Profile /></RequireRole>} />
+          <Route path="/history" element={<RequireRole role="user"><History /></RequireRole>} />
 
           {/* Admin screens */}
-          <Route path="/admin" element={<AdminDashboard />} />
-          <Route path="/admin/services" element={<ServiceManagement />} />
-          <Route path="/admin/queues" element={<QueueManagement />} />
+          <Route path="/admin" element={<RequireRole role="admin"><AdminDashboard /></RequireRole>} />
+          <Route path="/admin/services" element={<RequireRole role="admin"><ServiceManagement /></RequireRole>} />
+          <Route path="/admin/queues" element={<RequireRole role="admin"><QueueManagement /></RequireRole>} />
 
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
