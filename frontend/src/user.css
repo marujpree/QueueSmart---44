@@ -8,6 +8,9 @@
 
 .qs-header { background: #fff; border-bottom: 1px solid var(--line); }
 .qs-header-row { display: flex; justify-content: space-between; align-items: center; height: 64px; }
+.qs-header-actions { display: flex; align-items: center; gap: .75rem; }
+.qs-logout { background: none; border: 1px solid var(--line); border-radius: 8px; padding: .4rem .8rem; font: inherit; font-size: .85rem; color: inherit; cursor: pointer; }
+.qs-logout:hover { background: #f3f4f6; }
 .qs-tagline { font-size: .8rem; color: var(--muted); }
 
 .logo { display: inline-flex; align-items: center; gap: .45em; line-height: 1; }

@@ -2,6 +2,7 @@
 import { NavLink } from 'react-router-dom';
 import Logo from './Logo';
 import NotificationBell from './NotificationBell';
+import LogoutButton from './LogoutButton';
 import '../user.css';
 
 const tabs = [
@@ -19,7 +20,10 @@ export default function UserShell({ eyebrow, title, subtitle, children }) {
       <header className="qs-header">
         <div className="qs-wrap qs-header-row">
           <Logo />
-          <NotificationBell />
+          <div className="qs-header-actions">
+            <NotificationBell />
+            <LogoutButton />
+          </div>
         </div>
       </header>
 
