@@ -57,7 +57,7 @@ function validateService(values, existingServices, editingId) {
   return errors;
 }
 
-export default function ServiceForm({ service, existingServices, onSave, onCancel }) {
+export default function ServiceForm({ service, existingServices, onSave, onCancel, onDelete }) {
   const isEditing = Boolean(service);
   const editingId = isEditing ? service.id : null;
 
@@ -255,6 +255,11 @@ export default function ServiceForm({ service, existingServices, onSave, onCance
       
       {saveError && <p className="svc-error" role="alert">{saveError}</p>}
       <div className="svc-form-actions">
+        {onDelete && (
+          <button type = "button" className="svc-button" disabled={saving} onClick={onDelete}>
+            Delete
+          </button>
+        )}
         <button type="button" className="svc-button" onClick={onCancel}>
           Cancel
         </button>
