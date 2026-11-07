@@ -1,3 +1,4 @@
+const { persistTestUsers } = require("./userFixtures");
 const request = require("supertest");
 const app = require("../src/app");
 const { store, resetStore } = require("../src/data/store");
@@ -30,6 +31,7 @@ beforeEach(async () => {
   await resetTestDb();
   [7, 8, 9, 10].forEach((id) => store.users.push({ id, name: `Test User ${id}`, email: `test${id}@example.com`, role: "user" }));
   store.queues[3] = [];
+  await persistTestUsers();
   ids = [];
   for (const userId of [7, 8, 9]) ids.push((await joinQueue(userId, { serviceId: 3 })).entry.id);
 });

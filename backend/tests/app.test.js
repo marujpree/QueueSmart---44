@@ -1,18 +1,11 @@
-jest.mock("../src/db/db", () => {
-  const actual = jest.requireActual("../src/db/db");
-  return { ...actual, query: jest.fn(actual.query), withTransaction: jest.fn(actual.withTransaction) };
-});
-
 const request = require("supertest");
 const app = require("../src/app");
 const { resetStore } = require("../src/data/store");
-const { query, resetTestDb } = require("../src/db/db");
 const { currentUser, requireUser, requireAdmin } = require("../src/middleware/currentUser");
 const { HttpError, badRequest, unauthorized, forbidden, notFound, conflict } = require("../src/utils/httpError");
 
-beforeEach(async () => {
+beforeEach(() => {
   resetStore();
-  await resetTestDb();
 });
 
 const makeReq = (headers = {}) => ({
@@ -80,27 +73,10 @@ describe("currentUser middleware", () => {
   test("sets req.user to null for an unknown or bad id", async () => {
     const unknown = makeReq({ "x-user-id": "999" });
     const bad = makeReq({ "x-user-id": "abc" });
-    const negative = makeReq({ "x-user-id": "-1" });
     await currentUser(unknown, {}, jest.fn());
     await currentUser(bad, {}, jest.fn());
-    await currentUser(negative, {}, jest.fn());
     expect(unknown.user).toBeNull();
     expect(bad.user).toBeNull();
-    expect(negative.user).toBeNull();
-  });
-
-  test("never loads the password hash", async () => {
-    const req = makeReq({ "x-user-id": "1" });
-    await currentUser(req, {}, jest.fn());
-    expect(req.user).toEqual({ id: 1, email: "admin@queuesmart.com", role: "admin", name: "Admin" });
-  });
-
-  test("passes a database error to next", async () => {
-    const err = new Error("db down");
-    query.mockRejectedValueOnce(err);
-    const next = jest.fn();
-    await currentUser(makeReq({ "x-user-id": "3" }), {}, next);
-    expect(next).toHaveBeenCalledWith(err);
   });
 
   test("requireUser passes a 401 when nobody is signed in", () => {

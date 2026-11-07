@@ -1,14 +1,11 @@
 const API_URL = "http://localhost:3001/api";
 
-// demo student until login exists
-const fallbackUserId = 6;
-
 const currentUserId = () => {
   try {
     const saved = JSON.parse(localStorage.getItem("queuesmart.user"));
-    return saved?.id ?? fallbackUserId;
+    return saved?.id ?? null;
   } catch {
-    return fallbackUserId;
+    return null;
   }
 };
 
@@ -17,7 +14,7 @@ const request = async (method, path, body) => {
     method,
     headers: {
       "Content-Type": "application/json",
-      "x-user-id": String(currentUserId()),
+      ...(currentUserId() && { "x-user-id": String(currentUserId()) }),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });

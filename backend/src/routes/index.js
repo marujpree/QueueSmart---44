@@ -6,6 +6,8 @@ router.get("/health", (req, res) => {
   res.json({ ok: true });
 });
 
+router.use("/profiles", require("../modules/profiles/routes"));
+
 router.use("/auth", require("../modules/auth/routes"));
 
 router.use("/services", require("../modules/services/routes"));

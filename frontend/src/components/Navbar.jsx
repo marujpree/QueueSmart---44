@@ -8,6 +8,7 @@ const links = [
   ['/dashboard', 'User Dashboard'],
   ['/join', 'Join Queue'],
   ['/status', 'Queue Status'],
+  ['/profile', 'My profile'],
   ['/history', 'History'],
   ['/admin', 'Admin Dashboard'],
   ['/admin/services', 'Service Management'],

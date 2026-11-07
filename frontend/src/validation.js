@@ -3,6 +3,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function validateEmail(email) {
   const value = email.trim();
   if (!value) return "Email is required.";
+  if (value.length > 254) return "Email must be 254 characters or fewer.";
   if (!EMAIL_RE.test(value)) return "Enter a valid email address.";
   return "";
 }
@@ -10,6 +11,7 @@ export function validateEmail(email) {
 export function validatePassword(password) {
   if (!password) return "Password is required.";
   if (password.length < 8) return "Password must be at least 8 characters.";
+  if (password.length > 72) return "Password must be 72 characters or fewer.";
   if (!/[A-Za-z]/.test(password) || !/\d/.test(password))
     return "Password needs at least one letter and one number.";
   return "";
@@ -38,3 +40,12 @@ export function validatePhone(phone) {
   if (!/^\+?[\d\s\-().]+$/.test(value) || digits < 7 || digits > 15) return "Enter a valid phone number.";
   return "";
 }
+
+export function validateFullName(name) {
+  const value = name.trim();
+  if (!value) return "Full name is required.";
+  if ([...value].length > 100) return "Full name must be 100 characters or fewer.";
+  if (!/^\p{L}[\p{L}\p{M} '.-]*$/u.test(value)) return "Full name can only contain letters, spaces, hyphens, apostrophes and periods.";
+  return "";
+}
+

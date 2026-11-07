@@ -1,0 +1,10 @@
+.profile-card { max-width: 640px; margin-bottom: 3rem; }
+.profile-form fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.profile-form label { display: block; font-weight: 600; margin: 1.25rem 0 .5rem; }
+.profile-form label:first-child { margin-top: 0; }
+.profile-form input, .profile-form select { width: 100%; padding: .75rem; border: 1px solid var(--line); border-radius: 8px; font: inherit; background: #fff; }
+.profile-form input[readonly] { background: var(--panel); color: var(--muted); }
+.profile-form [aria-invalid="true"] { border-color: var(--red); }
+.profile-form .qs-muted { margin-top: .5rem; font-size: .85rem; }
+.profile-form .qs-btn { margin-top: 1.5rem; }
+.profile-form .profile-error { color: var(--red); margin: .5rem 0; font-size: .9rem; }

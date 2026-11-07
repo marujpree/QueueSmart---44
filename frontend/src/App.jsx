@@ -6,6 +6,7 @@ import UserDashboard from './pages/UserDashboard';
 import JoinQueue from './pages/JoinQueue';
 import QueueStatus from './pages/QueueStatus';
 import History from './pages/History';
+import Profile from './pages/profile';
 import AdminDashboard from './pages/AdminDashboard';
 import ServiceManagement from './pages/ServiceManagement';
 import QueueManagement from './pages/QueueManagement';
@@ -24,6 +25,7 @@ export default function App() {
           <Route path="/dashboard" element={<UserDashboard />} />
           <Route path="/join" element={<JoinQueue />} />
           <Route path="/status" element={<QueueStatus />} />
+          <Route path="/profile" element={<Profile />} />
           <Route path="/history" element={<History />} />
 
           {/* Admin screens */}
