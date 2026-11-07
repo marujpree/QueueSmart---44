@@ -8,7 +8,7 @@ const tabs = [
   ['/dashboard', 'Home'],
   ['/join', 'Join a queue'],
   ['/status', 'My place'],
-  ['/proflie', 'My profile'],
+  ['/profile', 'My profile'],
   ['/history', 'My visits'],
 ];
 
