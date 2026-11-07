@@ -6,7 +6,7 @@ import UserDashboard from './pages/UserDashboard';
 import JoinQueue from './pages/JoinQueue';
 import QueueStatus from './pages/QueueStatus';
 import History from './pages/History';
-import Profile from './pages/profile';
+import Profile from './pages/Profile';
 import AdminDashboard from './pages/AdminDashboard';
 import ServiceManagement from './pages/ServiceManagement';
 import QueueManagement from './pages/QueueManagement';
