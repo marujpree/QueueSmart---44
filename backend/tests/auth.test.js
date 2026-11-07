@@ -1,5 +1,6 @@
 const request = require("supertest");
 const app = require("../src/app");
+const { query } = require("../src/db/db");
 const { store, resetStore } = require("../src/data/store");
 
 beforeEach(() => {
@@ -15,14 +16,13 @@ describe("POST /api/auth/register", () => {
     expect(res.body.user).toEqual({
       id: 7,
       name: "New Person",
-      firstName: "New",
-      lastName: "Person",
+      preferences: {},
       email: "new.person@example.com",
       phone: "",
       role: "user",
     });
     expect(JSON.stringify(res.body)).not.toMatch(/password/i);
-    expect(store.users).toHaveLength(7);
+    expect((await query("SELECT * FROM user_profiles")).rowCount).toBe(7);
   });
 
   test("lowercases the email and trims the names", async () => {
@@ -30,7 +30,7 @@ describe("POST /api/auth/register", () => {
       .post("/api/auth/register")
       .send({ ...valid, firstName: "  Jane ", lastName: " Doe  ", email: "  Jane@Example.com " });
     expect(res.status).toBe(201);
-    expect(res.body.user).toMatchObject({ email: "jane@example.com", name: "Jane Doe", firstName: "Jane", lastName: "Doe" });
+    expect(res.body.user).toMatchObject({ email: "jane@example.com", name: "Jane Doe" });
   });
 
   test("saves an optional phone number", async () => {
@@ -48,7 +48,7 @@ describe("POST /api/auth/register", () => {
     const res = await request(app).post("/api/auth/register").send({ firstName: "", email: "bad", password: "short", phone: "abc" });
     expect(res.status).toBe(400);
     expect(Object.keys(res.body.fields).sort()).toEqual(["email", "firstName", "lastName", "password", "phone"]);
-    expect(store.users).toHaveLength(6);
+    expect((await query("SELECT * FROM user_profiles")).rowCount).toBe(6);
   });
 
   test("returns 400 when there is no body at all", async () => {
@@ -60,7 +60,7 @@ describe("POST /api/auth/register", () => {
   test("returns 409 for a duplicate email, ignoring case", async () => {
     const res = await request(app).post("/api/auth/register").send({ ...valid, email: "ADMIN@queuesmart.com" });
     expect(res.status).toBe(409);
-    expect(store.users).toHaveLength(6);
+    expect((await query("SELECT * FROM user_profiles")).rowCount).toBe(6);
   });
 });
 
@@ -68,7 +68,7 @@ describe("POST /api/auth/login", () => {
   test("signs in the seeded admin", async () => {
     const res = await request(app).post("/api/auth/login").send({ email: "admin@queuesmart.com", password: "Admin1234" });
     expect(res.status).toBe(200);
-    expect(res.body.user).toEqual({ id: 1, name: "Admin", email: "admin@queuesmart.com", role: "admin" });
+    expect(res.body.user).toEqual({ id: 1, name: "Admin", email: "admin@queuesmart.com", phone: "", preferences: {}, role: "admin" });
   });
 
   test("signs in a seeded user, ignoring email case", async () => {

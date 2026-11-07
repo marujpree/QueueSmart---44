@@ -1,3 +1,4 @@
+const { persistTestUsers } = require("./userFixtures");
 const request = require("supertest");
 const app = require("../src/app");
 const { store, resetStore } = require("../src/data/store");
@@ -24,11 +25,12 @@ const lineOf = (serviceId) => getQueue(serviceId).map((e) => e.userId);
 
 let ids;
 
-beforeEach(() => {
+beforeEach(async () => {
   resetStore();
   [7, 8, 9, 10].forEach((id) => store.users.push({ id, name: `Test User ${id}`, email: `test${id}@example.com`, role: "user" }));
   store.queues[3] = [];
   ids = [7, 8, 9].map((userId) => joinQueue(userId, { serviceId: 3 }).entry.id);
+  await persistTestUsers();
 });
 
 describe("getQueueDetails", () => {

@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS user_credentials (
 
 CREATE TABLE IF NOT EXISTS user_profiles (
   user_id int PRIMARY KEY REFERENCES user_credentials(id) ON DELETE CASCADE,
-  email varchar(254) NOT NULL UNIQUE REFERENCES user_credentials(email) ON UPDATE CASCADE,
+  email varchar(254) NOT NULL UNIQUE CONSTRAINT user_profiles_email_fkey REFERENCES user_credentials(email) ON UPDATE CASCADE,
   full_name varchar(100) NOT NULL,
   phone varchar(20) NULL,
   preferences jsonb NOT NULL DEFAULT '{}'::jsonb

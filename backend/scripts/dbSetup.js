@@ -33,6 +33,9 @@ const main = async () => {
 
     await query(fs.readFileSync(path.join(__dirname, "..", "src", "db", "schema.sql"), "utf8"));
     console.log("Schema is up to date.");
+    const { migrate } = require("../src/db/migrate");
+    await withTransaction(migrate);
+    console.log("Schema and migrations are up to date.");
 
     const { rows } = await query("SELECT COUNT(*)::int AS count FROM user_credentials");
     if (rows[0].count === 0) {

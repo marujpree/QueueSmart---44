@@ -1,3 +1,4 @@
+const { persistTestUsers } = require("./userFixtures");
 const request = require("supertest");
 const app = require("../src/app");
 const { store, resetStore } = require("../src/data/store");
@@ -24,9 +25,10 @@ const catchError = (fn) => {
   throw new Error("expected an error");
 };
 
-beforeEach(() => {
+beforeEach(async () => {
   resetStore();
   [7, 8, 9].forEach(addUser);
+  await persistTestUsers();
 });
 
 describe("getQueue ordering", () => {

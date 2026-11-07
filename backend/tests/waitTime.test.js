@@ -1,3 +1,4 @@
+const { persistTestUsers } = require("./userFixtures");
 const request = require("supertest");
 const app = require("../src/app");
 const { store, resetStore } = require("../src/data/store");
@@ -5,10 +6,11 @@ const { estimateWait } = require("../src/modules/waitTime/waitTimeService");
 const { joinQueue, leaveQueue, getMyEntry, getQueueSummary, serveNext } = require("../src/modules/queues/queueService");
 const { updateService } = require("../src/modules/services/service");
 
-beforeEach(() => {
+beforeEach(async () => {
   resetStore();
   store.queues[3] = [];
   [7, 8, 9].forEach(id => store.users.push({ id, name: "Test " + id, role: "user" }));
+  await persistTestUsers();
 });
 
 test("15 minutes per person gives 0, 15, 30 and 45 minute waits", () => {

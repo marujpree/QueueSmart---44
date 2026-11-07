@@ -1,4 +1,5 @@
-﻿const request = require("supertest");
+﻿const { persistTestUsers } = require("./userFixtures");
+const request = require("supertest");
 const app = require("../src/app");
 const { store, resetStore } = require("../src/data/store");
 const { getHistory, addHistory } = require("../src/modules/history/historyService");
@@ -9,9 +10,10 @@ const addUser = (id) => {
   return id;
 };
 
-beforeEach(() => {
+beforeEach(async () => {
   resetStore();
   [7, 8, 9].forEach(addUser);
+  await persistTestUsers();
 });
 
 describe("getHistory", () => {

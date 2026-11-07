@@ -14,6 +14,15 @@ if (isTest) {
   const { newDb } = require("pg-mem");
   memDb = newDb();
   memDb.public.none(fs.readFileSync(schemaPath, "utf8"));
+  const { migrations, readMigration } = require("./migrate");
+  memDb.public.registerFunction({ name: "regexp_replace", args: ["text", "text", "text", "text"], returns: "text",
+    implementation: (value, pattern, replacement, flags) => value.replace(new RegExp(pattern, flags), replacement) });
+  memDb.public.registerFunction({ name: "trim", args: ["text"], returns: "text", implementation: (value) => value.trim() });
+  memDb.public.registerFunction({ name: "length", args: ["text"], returns: "integer", implementation: (value) => [...value].length });
+  // pg-mem lacks PostgreSQL's POSIX regex operator; adapt only in test mode.
+  memDb.public.registerOperator({ operator: "~", left: "text", right: "text", returns: "bool",
+    implementation: (value, pattern) => new RegExp(pattern.replaceAll("[:space:]", "\\s")).test(value) });
+  for (const name of migrations()) memDb.public.none(readMigration(name));
   emptyBackup = memDb.backup();
   const { Pool } = memDb.adapters.createPg();
   pool = new Pool();
