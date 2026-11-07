@@ -187,7 +187,11 @@ const getQueueSummary = async (serviceId) => {
   };
 };
 
-module.exports = { priorities, getQueue, getStatus, describeEntry, getMyEntry, joinQueue, leaveQueue, getQueueSummary };
+module.exports = {
+  priorities, getQueue, getStatus, describeEntry, getMyEntry, joinQueue, leaveQueue, getQueueSummary,
+  // shared with adminQueueService
+  entrySelect, toEntry, toId, findQueue,
+};
 
 for (const name of ["getQueueDetails", "serveNext", "removeEntry", "setPriority", "moveEntry"]) {
   Object.defineProperty(module.exports, name, {
