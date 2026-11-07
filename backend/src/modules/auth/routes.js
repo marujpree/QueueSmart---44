@@ -3,12 +3,12 @@ const { register, login } = require("./service");
 
 const router = express.Router();
 
-router.post("/register", (req, res) => {
-  res.status(201).json({ user: register(req.body ?? {}) });
+router.post("/register", async (req, res) => {
+  res.status(201).json({ user: await register(req.body ?? {}) });
 });
 
-router.post("/login", (req, res) => {
-  res.json({ user: login(req.body ?? {}) });
+router.post("/login", async (req, res) => {
+  res.json({ user: await login(req.body ?? {}) });
 });
 
 module.exports = router;

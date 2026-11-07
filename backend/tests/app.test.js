@@ -56,25 +56,25 @@ describe("httpError helpers", () => {
 });
 
 describe("currentUser middleware", () => {
-  test("sets req.user from x-user-id", () => {
+  test("sets req.user from x-user-id", async () => {
     const req = makeReq({ "x-user-id": "3" });
     const next = jest.fn();
-    currentUser(req, {}, next);
+    await currentUser(req, {}, next);
     expect(req.user).toMatchObject({ id: 3, name: "Diego Cepeda", role: "user" });
     expect(next).toHaveBeenCalledWith();
   });
 
-  test("sets req.user to null with no header", () => {
+  test("sets req.user to null with no header", async () => {
     const req = makeReq();
-    currentUser(req, {}, jest.fn());
+    await currentUser(req, {}, jest.fn());
     expect(req.user).toBeNull();
   });
 
-  test("sets req.user to null for an unknown or bad id", () => {
+  test("sets req.user to null for an unknown or bad id", async () => {
     const unknown = makeReq({ "x-user-id": "999" });
     const bad = makeReq({ "x-user-id": "abc" });
-    currentUser(unknown, {}, jest.fn());
-    currentUser(bad, {}, jest.fn());
+    await currentUser(unknown, {}, jest.fn());
+    await currentUser(bad, {}, jest.fn());
     expect(unknown.user).toBeNull();
     expect(bad.user).toBeNull();
   });

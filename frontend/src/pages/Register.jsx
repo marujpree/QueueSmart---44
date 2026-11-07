@@ -2,7 +2,7 @@ import "./auth.css";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { UserPlus, User, Phone, Mail, Lock, Eye, EyeOff, ArrowRight, Info } from "lucide-react";
-import { validateEmail, validatePassword, validateConfirm, validateName, validatePhone } from "../validation";
+import { validateEmail, validatePassword, validateConfirm, validateName, validatePhone, validateFullName } from "../validation";
 import { apiPost } from "../api";
 
 export default function Register() {
@@ -190,7 +190,7 @@ export default function Register() {
 
         <div className="auth-notice">
           <Info size={14} />
-          <span>New accounts are regular user accounts. Data is kept in server memory and resets on restart.</span>
+          <span>New accounts are regular user accounts. Your account and profile are saved.</span>
         </div>
       </div>
     </div>

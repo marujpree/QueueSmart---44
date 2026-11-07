@@ -11,13 +11,18 @@
     "test": "jest",
     "test:coverage": "jest --coverage",
     "db:setup": "node scripts/dbSetup.js",
-    "db:reset": "node scripts/dbSetup.js --reset"
+    "db:reset": "node scripts/dbSetup.js --reset",
+    "db:migrate": "node scripts/dbmigrate.js",
+    "test:postgres": "node tests/postgresProfiles.integration.cjs"
   },
   "jest": {
     "testEnvironment": "node",
     "collectCoverageFrom": [
       "src/**/*.js",
       "!src/server.js"
+    ],
+    "setupFilesAfterEnv": [
+      "<rootDir>/tests/setup.js"
     ]
   },
   "dependencies": {
@@ -28,6 +33,7 @@
     "pg": "^8.23.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.15",
     "jest": "^30.5.2",
     "nodemon": "^3.1.14",
     "pg-mem": "^3.0.14",
