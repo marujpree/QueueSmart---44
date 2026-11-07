@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useLocation } from 'react-router-dom';
-import { apiGet, apiPost, apiPatch } from '../api';
+import { apiGet, apiPost, apiPatch, apiDelete } from '../api';
 
 // context
 const ServiceContext = createContext(null);
@@ -82,13 +82,27 @@ export function ServiceProvider({ children }) {
     const { service } = await apiGet(`/services/${id}`);
     return updateService(id, { isOpen: !service.isOpen });
   };
+  const removeService = async id => {
+    pendingWrites.current += 1;
+    requestVersion.current += 1;
+    try {
+      const result = await apiDelete(`/services/${id}`);
+      setServices(previous => previous.filter(s => s.id !== Number(id)));
+      return result;
+    } finally {
+      pendingWrites.current -= 1;
+      requestVersion.current += 1;
+      setLoading(false);
+      refreshServices();
+    }
+  };
   // waiting count from the last refresh
   const getQueueLength = id => queueLengths[id] ?? 0;
 
   return (
     <ServiceContext.Provider value={{ services, loading, error, refreshServices,
       getServiceById, addService, updateService,
-      toggleServiceOpen, getQueueLength }}>
+      toggleServiceOpen, getQueueLength, removeService }}>
       {children}
     </ServiceContext.Provider>
   );
