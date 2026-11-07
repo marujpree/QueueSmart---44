@@ -5,8 +5,8 @@ const { getQueueDetails, serveNext, removeEntry, setPriority, moveEntry } = requ
 
 const router = express.Router();
 
-router.get("/me", requireUser, (req, res) => {
-  res.json(getMyEntry(req.user.id) || { entry: null });
+router.get("/me", requireUser, async (req, res) => {
+  res.json((await getMyEntry(req.user.id)) || { entry: null });
 });
 
 router.post("/join", requireUser, async (req, res) => {
@@ -18,12 +18,12 @@ router.post("/leave", requireUser, async (req, res) => {
 });
 
 // public so the join page can show waits before signing in
-router.get("/:serviceId/summary", (req, res) => {
-  res.json(getQueueSummary(req.params.serviceId));
+router.get("/:serviceId/summary", async (req, res) => {
+  res.json(await getQueueSummary(req.params.serviceId));
 });
 
-router.get("/:serviceId/entries", requireAdmin, (req, res) => {
-  res.json(getQueueDetails(req.params.serviceId));
+router.get("/:serviceId/entries", requireAdmin, async (req, res) => {
+  res.json(await getQueueDetails(req.params.serviceId));
 });
 
 router.post("/:serviceId/serve-next", requireAdmin, async (req, res) => {
@@ -34,11 +34,11 @@ router.delete("/:serviceId/entries/:entryId", requireAdmin, async (req, res) => 
   res.json(await removeEntry(req.params.serviceId, req.params.entryId));
 });
 
-router.patch("/:serviceId/entries/:entryId", requireAdmin, (req, res) => {
-  res.json(setPriority(req.params.serviceId, req.params.entryId, req.body?.priority));
+router.patch("/:serviceId/entries/:entryId", requireAdmin, async (req, res) => {
+  res.json(await setPriority(req.params.serviceId, req.params.entryId, req.body?.priority));
 });
 
-router.post("/:serviceId/entries/:entryId/move", requireAdmin, (req, res) => {
-  res.json(moveEntry(req.params.serviceId, req.params.entryId, req.body?.direction));
+router.post("/:serviceId/entries/:entryId/move", requireAdmin, async (req, res) => {
+  res.json(await moveEntry(req.params.serviceId, req.params.entryId, req.body?.direction));
 });
 module.exports = router;

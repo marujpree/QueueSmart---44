@@ -13,7 +13,7 @@ import ServiceLoadStatus from "../components/ServiceLoadStatus";
 import "./ServiceManagement.css";
 
 export default function ServiceManagement() {
-  const { services, loading, error, getQueueLength, getServiceById, addService, updateService } = useServices();
+  const { services, loading, error, getQueueLength, getServiceById, addService, updateService, removeService } = useServices();
   const { addNotification } = useNotifications();
 
   // success message shown above table after saving
@@ -64,6 +64,14 @@ export default function ServiceManagement() {
 
     // sends success banner
     setBanner(`${values.name} was ${isCreating ? "created" : "updated"}.`);
+    backToList();
+  };
+
+  const handleDelete = async () => {
+    const service = getServiceById(editingId);
+    if (!window.confirm(`Delete ${service.name}? This cannot be undone.`)) return;
+    await removeService(editingId);
+    setBanner(`${service.name} was deleted.`);
     backToList();
   };
 
@@ -163,6 +171,7 @@ export default function ServiceManagement() {
                   existingServices={services}
                   onSave={handleSave}
                   onCancel={backToList}
+                  onDelete={mode === "edit" ? handleDelete : undefined}
                 />
               </section>
             )

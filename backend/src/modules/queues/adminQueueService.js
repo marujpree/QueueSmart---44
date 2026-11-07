@@ -5,36 +5,37 @@ const { addHistory } = require("../history/historyService");
 const { notifyServed, notifyAlmostReady, notifyRemoved } = require("../notifications/notificationService");
 const { priorities, getQueue, describeEntry, getQueueSummary } = require("./queueService");
 
-const getQueueDetails = (serviceId) => {
-  const service = getService(serviceId);
+const getQueueDetails = async (serviceId) => {
+  const service = await getService(serviceId);
+  const entries = await getQueue(service.id);
   return {
-    ...getQueueSummary(service.id),
-    entries: getQueue(service.id).map(describeEntry),
+    ...(await getQueueSummary(service.id)),
+    entries: await Promise.all(entries.map(describeEntry)),
   };
 };
 
 //add next served person controlled by admin advancing the queue
 const serveNext = async (serviceId) => {
-  const service = getService(serviceId);
-  const entry = getQueue(service.id)[0];
+  const service = await getService(serviceId);
+  const entry = (await getQueue(service.id))[0];
   if (!entry) throw conflict("No one waiting for this service.");
   entry.status = "served";
   entry.servedAt = new Date().toISOString();
   await addHistory({ userId: entry.userId, serviceId: service.id, serviceName: service.name, outcome: "Served", entryId: entry.id });
   await notifyServed(entry.userId, service.name);
 
-  const almostReady = getQueue(service.id)
+  const almostReady = (await getQueue(service.id))
     .slice(0, 2)
     .filter((next) => !next.almostReadyNotified);
   for (const next of almostReady) {
     next.almostReadyNotified = true;
     await notifyAlmostReady(next.userId, service.name);
   }
-  return { servedEntry: entry, ...getQueueDetails(service.id) };
+  return { servedEntry: entry, ...(await getQueueDetails(service.id)) };
 };
 
-const findEntry = (serviceId, entryId) => {
-  const service = getService(serviceId);
+const findEntry = async (serviceId, entryId) => {
+  const service = await getService(serviceId);
   const entry = (store.queues[service.id] || []).find(
   (e) => e.id === Number(entryId) && e.status === "waiting"
   );
@@ -43,7 +44,7 @@ const findEntry = (serviceId, entryId) => {
 }
 
 const removeEntry = async (serviceId, entryId) => {
-  const { service, entry } = findEntry(serviceId, entryId);
+  const { service, entry } = await findEntry(serviceId, entryId);
   const queue = store.queues[service.id];
   queue.splice(queue.indexOf(entry), 1);
   await addHistory({
@@ -54,26 +55,26 @@ const removeEntry = async (serviceId, entryId) => {
     entryId: entry.id,
   });
   await notifyRemoved(entry.userId, service.name);
-  return getQueueDetails(service.id)
+  return await getQueueDetails(service.id);
 };
 
-const setPriority = (serviceId, entryId, priority) => {
+const setPriority = async (serviceId, entryId, priority) => {
   if (!priorities.includes(priority)) {
     throw badRequest("Priority must be \"low\", \"medium\" or \"high\".", {
       priority: "Priority must be \"low\", \"medium\" or \"high\".",
   });
 }
-const { service, entry } = findEntry(serviceId, entryId);
+const { service, entry } = await findEntry(serviceId, entryId);
 entry.priority = priority;
-return getQueueDetails(service.id)
+return await getQueueDetails(service.id);
 };
 
-const moveEntry = (serviceId, entryId, direction) => {
+const moveEntry = async (serviceId, entryId, direction) => {
   if (direction !== "up" && direction !== "down") {
     throw badRequest("Direction must be \"up\" or \"down\".", { direction: "Direction must be \"up\" or \"down\"." });
   }
-    const { service } = findEntry(serviceId, entryId);
-    const line = getQueue(service.id);
+    const { service } = await findEntry(serviceId, entryId);
+    const line = await getQueue(service.id);
     const index = line.findIndex((e) => e.id === Number(entryId));
     const target = index + (direction === "up" ? -1 : 1);
     if (target < 0) throw conflict("That person is already at the front of the line.");
@@ -90,7 +91,7 @@ const moveEntry = (serviceId, entryId, direction) => {
     entry.orderAt = neighbour.orderAt;
     neighbour.orderAt = slot;
 
-    return getQueueDetails(service.id);
+    return await getQueueDetails(service.id);
 };
 
 module.exports = { getQueueDetails, serveNext, removeEntry, setPriority, moveEntry };

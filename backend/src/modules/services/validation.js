@@ -1,5 +1,4 @@
-const { badRequest, conflict } = require('../../utils/httpError');
-const { store } = require('../../data/store');
+const { badRequest } = require('../../utils/httpError');
 
 // Validate again on the server; browser validation can be bypassed.
 const validateService = (body, existing = null) => {
@@ -26,11 +25,7 @@ const validateService = (body, existing = null) => {
   const isOpen = values.isOpen === undefined ? true : values.isOpen;
   if (typeof isOpen !== 'boolean') fields.isOpen = 'Open status must be true or false.';
   if (Object.keys(fields).length) throw badRequest('Please fix the highlighted fields.', fields);
-  if (store.services.some(s => s.id !== existing?.id && s.name.toLowerCase() === name.toLowerCase())) {
-    const error = conflict('A service with this name already exists.');
-    error.fields = { name: error.message };
-    throw error;
-  }
+  
   return { name, description, durationMinutes: values.durationMinutes, priority: values.priority, isOpen };
 };
 
